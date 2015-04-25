@@ -79,7 +79,7 @@ dim(w)
 ```
 
 ```r
-w %>% head(5) %>% t
+w %>% head(4) %>% t
 ```
 
 ```
@@ -105,40 +105,20 @@ w %>% head(5) %>% t
 ## SeaLevel    "29.82"      "29.82"      "30.09"      "30.08"     
 ## ResultSpeed " 1.7"       " 2.7"       "13.0"       "13.3"      
 ## ResultDir   "27"         "25"         " 4"         " 2"        
-## AvgSpeed    "9.2"        "9.6"        "13.4"       "13.4"      
-##             5           
-## Station     "1"         
-## Date        "2007-05-03"
-## Tmax        "66"        
-## Tmin        "46"        
-## Tavg        "56"        
-## Depart      " 2"        
-## DewPoint    "40"        
-## WetBulb     "48"        
-## Heat        "9"         
-## Cool        " 0"        
-## Sunrise     "0446"      
-## Sunset      "1851"      
-## CodeSum     " "         
-## Depth       "0"         
-## Water1      "M"         
-## SnowFall    "0.0"       
-## PrecipTotal "0.00"      
-## StnPressure "29.39"     
-## SeaLevel    "30.12"     
-## ResultSpeed "11.7"      
-## ResultDir   " 7"        
-## AvgSpeed    "11.9"
+## AvgSpeed    "9.2"        "9.6"        "13.4"       "13.4"
 ```
 
 Reading through the weather data description I think it needs some sorting out.
 But for now I'll ignore the mess.
 I want to see how hard it's going to be to merge the weather and training data.
 
-
+Only two weather stations. The descrimination here will be through time not space.
 
 ## Some data exploration
 ## References
 ### Vector competence
 http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/
+
 http://jme.oxfordjournals.org/content/38/2/130.abstract
+- Tested 2 weeks later for virus.
+- Current weather less likely to be important than previous 2-4 weeks?

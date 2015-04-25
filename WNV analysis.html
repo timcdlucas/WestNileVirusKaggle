@@ -270,7 +270,7 @@ dim(w)
 <pre><code>## [1] 2944   22
 </code></pre>
 
-<pre><code class="r">w %&gt;% head(5) %&gt;% t
+<pre><code class="r">w %&gt;% head(4) %&gt;% t
 </code></pre>
 
 <pre><code>##             1            2            3            4           
@@ -295,35 +295,14 @@ dim(w)
 ## SeaLevel    &quot;29.82&quot;      &quot;29.82&quot;      &quot;30.09&quot;      &quot;30.08&quot;     
 ## ResultSpeed &quot; 1.7&quot;       &quot; 2.7&quot;       &quot;13.0&quot;       &quot;13.3&quot;      
 ## ResultDir   &quot;27&quot;         &quot;25&quot;         &quot; 4&quot;         &quot; 2&quot;        
-## AvgSpeed    &quot;9.2&quot;        &quot;9.6&quot;        &quot;13.4&quot;       &quot;13.4&quot;      
-##             5           
-## Station     &quot;1&quot;         
-## Date        &quot;2007-05-03&quot;
-## Tmax        &quot;66&quot;        
-## Tmin        &quot;46&quot;        
-## Tavg        &quot;56&quot;        
-## Depart      &quot; 2&quot;        
-## DewPoint    &quot;40&quot;        
-## WetBulb     &quot;48&quot;        
-## Heat        &quot;9&quot;         
-## Cool        &quot; 0&quot;        
-## Sunrise     &quot;0446&quot;      
-## Sunset      &quot;1851&quot;      
-## CodeSum     &quot; &quot;         
-## Depth       &quot;0&quot;         
-## Water1      &quot;M&quot;         
-## SnowFall    &quot;0.0&quot;       
-## PrecipTotal &quot;0.00&quot;      
-## StnPressure &quot;29.39&quot;     
-## SeaLevel    &quot;30.12&quot;     
-## ResultSpeed &quot;11.7&quot;      
-## ResultDir   &quot; 7&quot;        
-## AvgSpeed    &quot;11.9&quot;
+## AvgSpeed    &quot;9.2&quot;        &quot;9.6&quot;        &quot;13.4&quot;       &quot;13.4&quot;
 </code></pre>
 
 <p>Reading through the weather data description I think it needs some sorting out.
 But for now I&#39;ll ignore the mess.
 I want to see how hard it&#39;s going to be to merge the weather and training data.</p>
+
+<p>Only two weather stations. The descrimination here will be through time not space.</p>
 
 <h2>Some data exploration</h2>
 
@@ -331,8 +310,14 @@ I want to see how hard it&#39;s going to be to merge the weather and training da
 
 <h3>Vector competence</h3>
 
-<p><a href="http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/">http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/</a>
-<a href="http://jme.oxfordjournals.org/content/38/2/130.abstract">http://jme.oxfordjournals.org/content/38/2/130.abstract</a></p>
+<p><a href="http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/">http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/</a></p>
+
+<p><a href="http://jme.oxfordjournals.org/content/38/2/130.abstract">http://jme.oxfordjournals.org/content/38/2/130.abstract</a></p>
+
+<ul>
+<li>Tested 2 weeks later for virus.</li>
+<li>Current weather less likely to be important than previous 2-4 weeks?</li>
+</ul>
 
 </body>
 

@@ -34,7 +34,7 @@ head(spray)
 w <- read.csv('weather.csv')
 dim(w)
 
-w %>% head(5) %>% t
+w %>% head(4) %>% t
 
 #' Reading through the weather data description I think it needs some sorting out.
 #' But for now I'll ignore the mess.
