@@ -1,3 +1,11 @@
+---
+title: "West Nile Virus Kaggle Competition"
+output:
+ html_document:
+   keep_md: true
+   toc: true
+   number_sections: true
+---
 # West Nile Virus Kaggle Competition
 The competition is to predict the presence of West Nile Viris in mosquitos
 The sampling unit is a trap.
@@ -16,6 +24,11 @@ library(Metrics)
 library(randomForest)
 library(lubridate)
 library(glmnet)
+library(caret)
+library(caretEnsemble)
+library(gam)
+library(pROC)
+library(doMC)
 
 auc <- Metrics::auc
 
@@ -47,8 +60,8 @@ train %>% head(1) %>% t
 ## Street                 " N OAK PARK AVE"                                   
 ## Trap                   "T002"                                              
 ## AddressNumberAndStreet "4100  N OAK PARK AVE, Chicago, IL"                 
-## Latitude               "41.95469"                                          
-## Longitude              "-87.800991"                                        
+## Latitude               "41.95"                                             
+## Longitude              "-87.8"                                             
 ## AddressAccuracy        "9"                                                 
 ## NumMosquitos           "1"                                                 
 ## WnvPresent             "0"
@@ -71,13 +84,13 @@ head(spray)
 ```
 
 ```
-##         Date       Time  Latitude  Longitude
-## 1 2011-08-29 6:56:58 PM 42.391623 -88.089163
-## 2 2011-08-29 6:57:08 PM 42.391348 -88.089163
-## 3 2011-08-29 6:57:18 PM 42.391022 -88.089157
-## 4 2011-08-29 6:57:28 PM 42.390637 -88.089158
-## 5 2011-08-29 6:57:38 PM 42.390410 -88.088858
-## 6 2011-08-29 6:57:48 PM 42.390395 -88.088315
+##         Date       Time Latitude Longitude
+## 1 2011-08-29 6:56:58 PM    42.39    -88.09
+## 2 2011-08-29 6:57:08 PM    42.39    -88.09
+## 3 2011-08-29 6:57:18 PM    42.39    -88.09
+## 4 2011-08-29 6:57:28 PM    42.39    -88.09
+## 5 2011-08-29 6:57:38 PM    42.39    -88.09
+## 6 2011-08-29 6:57:48 PM    42.39    -88.09
 ```
 
 ```r
@@ -163,14 +176,11 @@ plot(fitCv1)
 ```
 
 ```
-## Warning in sqrt(crit * p * (1 - hh)/hh): NaNs produced
+## Warning: NaNs produced
+## Warning: NaNs produced
 ```
 
-```
-## Warning in sqrt(crit * p * (1 - hh)/hh): NaNs produced
-```
-
-![plot of chunk fitModel1](figure/fitModel1-1.png) 
+![plot of chunk fitModel1](figure/fitModel11.png) 
 
 ```r
 par(mfrow = c(2,2))
@@ -188,7 +198,7 @@ train %>%
 ```
 
 ```
-## .
+## train %>% filter(dYear == 2011) %>% select(WnvPresent)
 ##    0    1 
 ## 1997   57
 ```
@@ -202,10 +212,10 @@ train %>%
 ```
 
 ```
-## [1] 0.71173427
+## [1] 0.7117
 ```
 
-![plot of chunk fitModel1](figure/fitModel1-2.png) 
+![plot of chunk fitModel1](figure/fitModel12.png) 
 
 Now add Latitude and longitude
 
@@ -230,7 +240,7 @@ train %>%
 ```
 
 ```
-## [1] 0.79344016
+## [1] 0.7934
 ```
 
 Hooray. An increase. Let's still naively try some different models.
@@ -247,8 +257,8 @@ fitCvRF <- train %>%
 ```
 
 ```
-## Warning in randomForest.default(m, y, ...): The response has five or fewer
-## unique values.  Are you sure you want to do regression?
+## Warning: The response has five or fewer unique values.  Are you sure you
+## want to do regression?
 ```
 
 ```r
@@ -267,7 +277,7 @@ train %>%
 ```
 
 ```
-## [1] 0.75138585
+## [1] 0.7514
 ```
 
 We'll go with the Random Forest as there's 5 subs a day.
@@ -317,7 +327,7 @@ w$Tavg %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -328,7 +338,7 @@ w$Depart %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -336,7 +346,7 @@ w$Heat %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -344,7 +354,7 @@ w$WetBulb %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -353,7 +363,7 @@ w$Cool %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -364,7 +374,7 @@ w$PrecipTotal %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -373,7 +383,7 @@ w$SnowFall %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -382,7 +392,7 @@ w$Sunset %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -390,7 +400,7 @@ w$Sunrise %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -398,7 +408,7 @@ w$SeaLeve %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -406,7 +416,7 @@ w$AvgSpeed %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -414,7 +424,7 @@ w$StnPressure %<>% as.numeric
 ```
 
 ```
-## Warning in function_list[[k]](value): NAs introduced by coercion
+## Warning: NAs introduced by coercion
 ```
 
 ```r
@@ -452,8 +462,8 @@ Later I will want to look at data before the date of collection.
 
 ```r
 # Turn to dates
-train$Date %<>% as.character %>% ymd
-test$Date %<>% as.character %>% ymd
+train$Date <- train$Date %>% as.character %>% ymd
+test$Date <- test$Date %>% as.character %>% ymd
 
 
 # Make a reference vector of which rows in w is the same date as the rows in train/test
@@ -465,16 +475,16 @@ wTOte1 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 1))
 wTOte2 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 2))
 
 train$PrecipTotal <- cbind(w$PrecipTotal[wTOtr1], w$PrecipTotal[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$PrecipTotal <- cbind(w$PrecipTotal[wTOte1], w$PrecipTotal[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$PrecipTotal)
 ```
 
-![plot of chunk AttachWeather](figure/AttachWeather-1.png) 
+![plot of chunk AttachWeather](figure/AttachWeather.png) 
 
 OK. That kind of surprises me.
 I thought there'd be a positive correlation.
@@ -483,55 +493,55 @@ The issue with overspilling datapoint when 50 mosquitos is reached is noticeable
 
 ```r
 train$Tavg <- cbind(w$Tavg[wTOtr1], w$Tavg[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$Tavg <- cbind(w$Tavg[wTOte1], w$Tavg[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$Tavg)
 ```
 
-![plot of chunk tempData](figure/tempData-1.png) 
+![plot of chunk tempData](figure/tempData1.png) 
 
 ```r
 train$AvgSpeed <- cbind(w$AvgSpeed[wTOtr1], w$AvgSpeed[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$AvgSpeed <- cbind(w$AvgSpeed[wTOte1], w$AvgSpeed[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$AvgSpeed)
 ```
 
-![plot of chunk tempData](figure/tempData-2.png) 
+![plot of chunk tempData](figure/tempData2.png) 
 
 ```r
 train$Tmax <- cbind(w$Tmax[wTOtr1], w$Tmax[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$Tmax <- cbind(w$Tmax[wTOte1], w$Tmax[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$Tmax)
 ```
 
-![plot of chunk tempData](figure/tempData-3.png) 
+![plot of chunk tempData](figure/tempData3.png) 
 
 ```r
 train$StnPressure <- cbind(w$StnPressure[wTOtr1], w$StnPressure[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$StnPressure <- cbind(w$StnPressure[wTOte1], w$StnPressure[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$StnPressure)
 ```
 
-![plot of chunk tempData](figure/tempData-4.png) 
+![plot of chunk tempData](figure/tempData4.png) 
 
 Think I need to deal with this 50 mosquito cut off.
 However for now let's just fit a RandomForest, and lasso.
@@ -778,6 +788,226 @@ write.csv(subLas2, filenameLas2, row.names=FALSE, quote=FALSE)
 ```
 
 This gave me my best result so far. But only by a tiny amount.
+## Let's try the caret package for fun.
+
+
+```r
+train %<>% cbind(model.matrix( ~ Species2 + 0, train))
+test %<>% cbind(model.matrix( ~ Species2 + 0, test))
+
+
+varsTr <- c('Tavg', 'AvgSpeed', 'Tmax', 'StnPressure', 'Block', 
+          'Latitude', 'Longitude', 'dMonth', "Species2CULEX ERRATICUS",
+          "Species2CULEX PIPIENS", "Species2CULEX PIPIENS/RESTUANS", 
+          "Species2CULEX RESTUANS", "Species2CULEX SALINARIUS", 
+          "Species2CULEX TARSALIS", "Species2CULEX TERRITANS"  ) %>% 
+          match(names(train))
+
+
+
+varsTe <- c('Tavg', 'AvgSpeed', 'Tmax', 'StnPressure', 'Block', 
+          'Latitude', 'Longitude', 'dMonth', "Species2CULEX ERRATICUS",
+          "Species2CULEX PIPIENS", "Species2CULEX PIPIENS/RESTUANS", 
+          "Species2CULEX RESTUANS", "Species2CULEX SALINARIUS", 
+          "Species2CULEX TARSALIS", "Species2CULEX TERRITANS"  ) %>% 
+          match(names(test))
+
+trainCVMat2 <- train %>%
+  filter(dYear != 2011) %>%
+  select(varsTr) %>%
+  as.matrix
+
+trainCVMat2 %<>% apply(., 2, as.numeric)
+  
+
+
+testCVMat2 <- train %>%
+  filter(dYear == 2011) %>%
+  select(varsTr) %>%
+  as.matrix
+
+testCVMat2 %<>% apply(., 2, as.numeric)
+  
+
+trainFullMat2 <- train %>%
+  select(varsTr) %>%
+  as.matrix
+
+trainFullMat2 %<>% apply(., 2, as.numeric)
+  
+
+
+testFullMat2 <- test %>%
+  select(varsTe) %>%
+  as.matrix
+
+testFullMat2 %<>% apply(., 2, as.numeric)
+```
+
+```r
+fitLassoSp <-
+  cv.glmnet(x = trainCVMat2, y = train$WnvPresent[train$dYear != 2011], 
+    family = 'binomial', alpha = 0)
+
+# Make predictions
+predCvLassoSp <- 
+  predict(fitLassoSp, newx = testCVMat2, type = 'response', s = fitLassoSp$lambda.min)
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  Metrics::auc(., predCvLassoSp)
+```
+
+```
+## [1] 0.76791942
+```
+
+```r
+fitFullLassoSp <-
+  cv.glmnet(x = trainFullMat2, y = train$WnvPresent, 
+    family = 'binomial', alpha = 1)
+
+# Make predictions
+predFullLassoSp <- 
+  predict(fitFullLassoSp, newx = testFullMat2, type = 'response', s = fitFullLassoSp$lambda.min)
+
+
+
+subLassoSp <- cbind(test$Id, predFullLassoSp)
+colnames(subLassoSp) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameLassoSp <- 'subs/las4sub150426.csv'
+write.csv(subLassoSp, filenameLassoSp, row.names=FALSE, quote=FALSE)
+```
+
+## Try a GAM as forum said it's quite good
+
+
+```r
+train$dWeek <- week(train$Date)
+test$dWeek <- week(test$Date)
+
+
+set.seed(2256)
+fitCvGAM <- train %>%
+  filter(dYear != 2011) %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+# Make predictions
+predCvGAM <- train %>%
+  filter(dYear == 2011) %>%
+  predict(fitCvGAM, newdata = ., type = "response")
+
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  auc(., predCvGAM)
+```
+
+```
+## [1] 0.75298474
+```
+
+Now submit
+
+
+```r
+fullGAM <- train %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+
+fullGAM.pred <- predict(fullGAM, newdata = test, type = "response")
+
+subGAM <- cbind(test$Id, fullGAM.pred)
+colnames(subGAM) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameGAM <- 'subs/gam1sub150426.csv'
+write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
+```
+
+```r
+set.seed(2256)
+fitCvGAM <- train %>%
+  filter(dYear != 2011) %$%
+  gam::gam(WnvPresent ~ lo(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+# Make predictions
+predCvGAM <- train %>%
+  filter(dYear == 2011) %>%
+  predict(fitCvGAM, newdata = ., type = "response")
+
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  auc(., predCvGAM)
+```
+
+```
+## [1] 0.76347416
+```
+
+Now submit
+
+
+```r
+fullGAM <- train %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+
+fullGAM.pred <- predict(fullGAM, newdata = test, type = "response")
+
+subGAM <- cbind(test$Id, fullGAM.pred)
+colnames(subGAM) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameGAM <- 'subs/gam2sub150426.csv'
+write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
+```
+
+## Try caret
+
+
+```r
+set.seed(2330)
+
+train$wnvFac <- factor(train$WnvPresent)
+
+
+registerDoMC(cores = 7)
+
+
+ctrl <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+fitCvCar <- train(wnvFac ~ Longitude + Latitude + Species2,
+    data = train,
+    method = 'glm',
+    trControl = ctrl,
+    preProc = c("center", "scale"))
+```
+
+```
+## Warning: At least one of the class levels are not valid R variables names; This may cause errors if class probabilities are generated because the variables names will be converted to: X0, X1
+## Warning: The metric "Accuracy" was not in the result set. ROC will be used instead.
+```
+
 ## References and notes
 ### Vector competence
 http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2631924/

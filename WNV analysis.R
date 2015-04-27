@@ -1,3 +1,13 @@
+#' ---
+#' title: "West Nile Virus Kaggle Competition"
+#'output:
+#'  html_document:
+#'    keep_md: true
+#'    toc: true
+#'    number_sections: true
+#' ---
+
+
 #' # West Nile Virus Kaggle Competition
 
 #' The competition is to predict the presence of West Nile Viris in mosquitos
@@ -254,8 +264,8 @@ head(w)
 #+ AttachWeather
 
 # Turn to dates
-train$Date %<>% as.character %>% ymd
-test$Date %<>% as.character %>% ymd
+train$Date <- train$Date %>% as.character %>% ymd
+test$Date <- test$Date %>% as.character %>% ymd
 
 
 # Make a reference vector of which rows in w is the same date as the rows in train/test
@@ -267,10 +277,10 @@ wTOte1 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 1))
 wTOte2 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 2))
 
 train$PrecipTotal <- cbind(w$PrecipTotal[wTOtr1], w$PrecipTotal[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$PrecipTotal <- cbind(w$PrecipTotal[wTOte1], w$PrecipTotal[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$PrecipTotal)
@@ -283,10 +293,10 @@ smoothScatter(train$NumMosquitos ~ train$PrecipTotal)
 
 
 train$Tavg <- cbind(w$Tavg[wTOtr1], w$Tavg[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$Tavg <- cbind(w$Tavg[wTOte1], w$Tavg[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$Tavg)
@@ -294,10 +304,10 @@ smoothScatter(train$NumMosquitos ~ train$Tavg)
 
 
 train$AvgSpeed <- cbind(w$AvgSpeed[wTOtr1], w$AvgSpeed[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$AvgSpeed <- cbind(w$AvgSpeed[wTOte1], w$AvgSpeed[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$AvgSpeed)
@@ -305,20 +315,20 @@ smoothScatter(train$NumMosquitos ~ train$AvgSpeed)
 
 
 train$Tmax <- cbind(w$Tmax[wTOtr1], w$Tmax[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$Tmax <- cbind(w$Tmax[wTOte1], w$Tmax[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$Tmax)
 
 
 train$StnPressure <- cbind(w$StnPressure[wTOtr1], w$StnPressure[wTOtr2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 test$StnPressure <- cbind(w$StnPressure[wTOte1], w$StnPressure[wTOte2]) %>%
-                       apply(., 1, . %>% mean(., na.rm = TRUE))
+                       apply(., 1, function(x) mean(x, na.rm = TRUE))
 
 
 smoothScatter(train$NumMosquitos ~ train$StnPressure)
@@ -729,7 +739,7 @@ train %>%
 
 
 #' Now submit
-#+ subGAM
+#+ subGAM2
 
 fullGAM <- train %$%
   gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
@@ -749,7 +759,7 @@ write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
 
 
 
-#'/*####################################*/
+#' ## Try caret
 
 
 #+ caret
@@ -769,7 +779,7 @@ ctrl <- trainControl(method = "repeatedcv",
 
 fitCvCar <- train(wnvFac ~ Longitude + Latitude + Species2,
     data = train,
-    method = 'GLM',
+    method = 'glm',
     trControl = ctrl,
     preProc = c("center", "scale"))
 
