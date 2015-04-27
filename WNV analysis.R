@@ -18,6 +18,11 @@ library(Metrics)
 library(randomForest)
 library(lubridate)
 library(glmnet)
+library(caret)
+library(caretEnsemble)
+library(gam)
+library(pROC)
+library(doMC)
 
 auc <- Metrics::auc
 
@@ -552,6 +557,226 @@ filenameLas2 <- 'subs/las2sub150425.csv'
 write.csv(subLas2, filenameLas2, row.names=FALSE, quote=FALSE)
 
 #' This gave me my best result so far. But only by a tiny amount.
+
+
+
+#'## Let's try the caret package for fun.
+
+#+ Make dummy vars
+
+train %<>% cbind(model.matrix( ~ Species2 + 0, train))
+test %<>% cbind(model.matrix( ~ Species2 + 0, test))
+
+
+varsTr <- c('Tavg', 'AvgSpeed', 'Tmax', 'StnPressure', 'Block', 
+          'Latitude', 'Longitude', 'dMonth', "Species2CULEX ERRATICUS",
+          "Species2CULEX PIPIENS", "Species2CULEX PIPIENS/RESTUANS", 
+          "Species2CULEX RESTUANS", "Species2CULEX SALINARIUS", 
+          "Species2CULEX TARSALIS", "Species2CULEX TERRITANS"  ) %>% 
+          match(names(train))
+
+
+
+varsTe <- c('Tavg', 'AvgSpeed', 'Tmax', 'StnPressure', 'Block', 
+          'Latitude', 'Longitude', 'dMonth', "Species2CULEX ERRATICUS",
+          "Species2CULEX PIPIENS", "Species2CULEX PIPIENS/RESTUANS", 
+          "Species2CULEX RESTUANS", "Species2CULEX SALINARIUS", 
+          "Species2CULEX TARSALIS", "Species2CULEX TERRITANS"  ) %>% 
+          match(names(test))
+
+trainCVMat2 <- train %>%
+  filter(dYear != 2011) %>%
+  select(varsTr) %>%
+  as.matrix
+
+trainCVMat2 %<>% apply(., 2, as.numeric)
+  
+
+
+testCVMat2 <- train %>%
+  filter(dYear == 2011) %>%
+  select(varsTr) %>%
+  as.matrix
+
+testCVMat2 %<>% apply(., 2, as.numeric)
+  
+
+trainFullMat2 <- train %>%
+  select(varsTr) %>%
+  as.matrix
+
+trainFullMat2 %<>% apply(., 2, as.numeric)
+  
+
+
+testFullMat2 <- test %>%
+  select(varsTe) %>%
+  as.matrix
+
+testFullMat2 %<>% apply(., 2, as.numeric)
+  
+
+
+#+ LassoPresence
+
+
+fitLassoSp <-
+  cv.glmnet(x = trainCVMat2, y = train$WnvPresent[train$dYear != 2011], 
+    family = 'binomial', alpha = 0)
+
+# Make predictions
+predCvLassoSp <- 
+  predict(fitLassoSp, newx = testCVMat2, type = 'response', s = fitLassoSp$lambda.min)
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  Metrics::auc(., predCvLassoSp)
+
+
+fitFullLassoSp <-
+  cv.glmnet(x = trainFullMat2, y = train$WnvPresent, 
+    family = 'binomial', alpha = 1)
+
+# Make predictions
+predFullLassoSp <- 
+  predict(fitFullLassoSp, newx = testFullMat2, type = 'response', s = fitFullLassoSp$lambda.min)
+
+
+
+subLassoSp <- cbind(test$Id, predFullLassoSp)
+colnames(subLassoSp) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameLassoSp <- 'subs/las4sub150426.csv'
+write.csv(subLassoSp, filenameLassoSp, row.names=FALSE, quote=FALSE)
+
+
+#'## Try a GAM as forum said it's quite good
+#+ gam1
+
+
+
+
+train$dWeek <- week(train$Date)
+test$dWeek <- week(test$Date)
+
+
+set.seed(2256)
+fitCvGAM <- train %>%
+  filter(dYear != 2011) %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+# Make predictions
+predCvGAM <- train %>%
+  filter(dYear == 2011) %>%
+  predict(fitCvGAM, newdata = ., type = "response")
+
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  auc(., predCvGAM)
+
+
+#' Now submit
+#+ subGAM
+
+
+
+
+fullGAM <- train %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+
+fullGAM.pred <- predict(fullGAM, newdata = test, type = "response")
+
+subGAM <- cbind(test$Id, fullGAM.pred)
+colnames(subGAM) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameGAM <- 'subs/gam1sub150426.csv'
+write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
+
+
+
+#+ gam2
+
+set.seed(2256)
+fitCvGAM <- train %>%
+  filter(dYear != 2011) %$%
+  gam::gam(WnvPresent ~ lo(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+# Make predictions
+predCvGAM <- train %>%
+  filter(dYear == 2011) %>%
+  predict(fitCvGAM, newdata = ., type = "response")
+
+
+
+# Calculate AUC
+train %>%
+  filter(dYear == 2011) %>%
+  .[['WnvPresent']] %>%
+  auc(., predCvGAM)
+
+
+#' Now submit
+#+ subGAM
+
+fullGAM <- train %$%
+  gam::gam(WnvPresent ~ s(dWeek) + Species2  + lo(Latitude + Longitude) + s(PrecipTotal), 
+    family = 'binomial')
+
+
+fullGAM.pred <- predict(fullGAM, newdata = test, type = "response")
+
+subGAM <- cbind(test$Id, fullGAM.pred)
+colnames(subGAM) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameGAM <- 'subs/gam2sub150426.csv'
+write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
+
+
+
+
+
+#'/*####################################*/
+
+
+#+ caret
+
+set.seed(2330)
+
+train$wnvFac <- factor(train$WnvPresent)
+
+
+registerDoMC(cores = 7)
+
+
+ctrl <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+fitCvCar <- train(wnvFac ~ Longitude + Latitude + Species2,
+    data = train,
+    method = 'GLM',
+    trControl = ctrl,
+    preProc = c("center", "scale"))
+
+
+
+
+
 
 
 #' ## References and notes
