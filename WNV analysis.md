@@ -3,8 +3,6 @@ title: "West Nile Virus Kaggle Competition"
 output:
  html_document:
    keep_md: true
-   toc: true
-   number_sections: true
 ---
 # West Nile Virus Kaggle Competition
 The competition is to predict the presence of West Nile Viris in mosquitos
@@ -13,6 +11,7 @@ We're given some species information and weather information.
 
 The competition metric is AUC.
 ## Librarys and options
+
 
 
 ```r
@@ -31,7 +30,9 @@ library(pROC)
 library(doMC)
 
 auc <- Metrics::auc
+```
 
+```r
 set.seed(101)
 ```
 
@@ -252,7 +253,7 @@ fitCvRF <- train %>%
   filter(dYear != 2011) %$%
   randomForest::randomForest(WnvPresent ~ dMonth + Species2 + Block + Latitude + Longitude, 
     type = "classification",
-    ntree = 2000, 
+    ntree = 1000, 
     mtry = 2)
 ```
 
@@ -277,7 +278,7 @@ train %>%
 ```
 
 ```
-## [1] 0.7514
+## [1] 0.7521
 ```
 
 We'll go with the Random Forest as there's 5 subs a day.
@@ -287,7 +288,7 @@ We'll go with the Random Forest as there's 5 subs a day.
 fullRF1 <- train %$%
   randomForest::randomForest(factor(WnvPresent) ~ dMonth + Species2 + Block + Latitude + Longitude, 
     type = "classification",
-    ntree = 2000, 
+    ntree = 1000, 
     mtry = 2)
 
 
@@ -299,6 +300,9 @@ options("scipen" = 100, "digits" = 8)
 
 filenameRF1 <- 'subs/rf1sub150425.csv'
 write.csv(subRF1, filenameRF1, row.names=FALSE, quote=FALSE)
+
+
+rm(fullRF1, fitCvRF, fullRF1.pred, subRF1)
 ```
 
 Time to submit!
@@ -601,7 +605,7 @@ train %>%
 ```
 
 ```
-## [1] 0.74037811
+## [1] 0.74160803
 ```
 
 ```r
@@ -668,7 +672,7 @@ train %>%
 ```
 
 ```
-## [1] 0.740914
+## [1] 0.74098428
 ```
 
 ```r
@@ -765,7 +769,7 @@ train %>%
 ```
 
 ```
-## [1] 0.73727697
+## [1] 0.73714519
 ```
 
 ```r
@@ -983,29 +987,424 @@ write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
 
 
 ```r
+registerDoMC(cores = 7)
+```
+
+```r
 set.seed(2330)
 
-train$wnvFac <- factor(train$WnvPresent)
+train$wnvFac <- factor(train$WnvPresent, labels = c('Absent', 'Present'))
 
 
-registerDoMC(cores = 7)
+
 
 
 ctrl <- trainControl(method = "repeatedcv",
   repeats = 1,
+  number = 5,
   classProbs = TRUE,
   summaryFunction = twoClassSummary)
 
-fitCvCar <- train(wnvFac ~ Longitude + Latitude + Species2,
+fitCvCarGlm <- train(wnvFac ~ Longitude + Latitude + Species2,
     data = train,
-    method = 'glm',
+    method = 'LogitBoost',
     trControl = ctrl,
-    preProc = c("center", "scale"))
+    preProc = c("center", "scale"),
+    tuneLength = 3,
+    metric = 'ROC')
+
+
+fitCvCarGlm
 ```
 
 ```
-## Warning: At least one of the class levels are not valid R variables names; This may cause errors if class probabilities are generated because the variables names will be converted to: X0, X1
-## Warning: The metric "Accuracy" was not in the result set. ROC will be used instead.
+## Boosted Logistic Regression 
+## 
+## 10506 samples
+##    29 predictors
+##     2 classes: 'Absent', 'Present' 
+## 
+## Pre-processing: centered, scaled 
+## Resampling: Cross-Validated (5 fold, repeated 1 times) 
+## 
+## Summary of sample sizes: 8405, 8404, 8405, 8405, 8405 
+## 
+## Resampling results across tuning parameters:
+## 
+##   nIter  ROC         Sens        Spec  ROC SD       Sens SD        Spec SD
+##   11     0.39694670  1.00000000  0     0.015812107  0.00000000000  0      
+##   21     0.38458247  1.00000000  0     0.028764519  0.00000000000  0      
+##   31     0.40069872  0.99959819  0     0.054202970  0.00089847031  0      
+## 
+## ROC was used to select the optimal model using  the largest value.
+## The final value used for the model was nIter = 31.
+```
+
+## Now let's try caretEnsemble.
+Code mostly copied from the vignette http://cran.r-project.org/web/packages/caretEnsemble/vignettes/caretEnsemble-intro.html
+
+
+```r
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE)
+
+
+
+model_list <- caretList(wnvFac ~ Longitude + Latitude  + Species2 + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda',  'nnet', 'glm'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+```
+
+```
+## Warning: indexes not defined in trControl.  Attempting to set them
+## ourselves, so each model in the ensemble will have the same resampling
+## indexes.
+```
+
+```
+## # weights:  86
+## initial  value 5954.013973 
+## iter  10 value 1860.438570
+## iter  20 value 1823.487757
+## iter  30 value 1801.562927
+## iter  40 value 1788.969726
+## iter  50 value 1782.246425
+## iter  60 value 1778.814100
+## iter  70 value 1778.225864
+## iter  80 value 1778.062310
+## iter  90 value 1777.815982
+## iter 100 value 1777.721143
+## final  value 1777.721143 
+## stopped after 100 iterations
+```
+
+```r
+xyplot(resamples(model_list))
+```
+
+![plot of chunk ensemble](figure/ensemble.png) 
+
+```r
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+```
+
+```
+## The following models were ensembled: fda, nnet, glm 
+## They were weighted: 
+## 0.44 0.55 0.01
+## The resulting AUC is: 0.8106
+## The fit for each individual model on the AUC is: 
+##  method     metric    metricSD
+##     fda 0.79375356 0.042140096
+##    nnet 0.80131463 0.030485298
+##     glm 0.78012855 0.027611279
+```
+
+```r
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens1sub150427.csv'
+write.csv(subEns, filenameEns, row.names=FALSE, quote=FALSE)
+```
+
+
+## A big ensemble.
+
+
+```r
+set.seed(2042)
+
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+model_list <- caretList(wnvFac ~ Longitude^2 + Longitude + Latitude + Latitude^2 + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda', 'LogitBoost', 'bagEarth', 'nnet'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+```
+
+```
+## Warning: trControl$savePredictions=FALSE.  Setting to TRUE so we can ensemble the models.
+## Warning: indexes not defined in trControl.  Attempting to set them ourselves, so each model in the ensemble will have the same resampling indexes.
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+```
+
+```
+## # weights:  91
+## initial  value 4262.396414 
+## iter  10 value 1882.927819
+## iter  20 value 1824.204131
+## iter  30 value 1807.709728
+## iter  40 value 1795.270746
+## iter  50 value 1789.922130
+## iter  60 value 1783.054994
+## iter  70 value 1776.986838
+## iter  80 value 1774.123579
+## iter  90 value 1773.017485
+## iter 100 value 1772.639791
+## final  value 1772.639791 
+## stopped after 100 iterations
+```
+
+```r
+xyplot(resamples(model_list))
+```
+
+![plot of chunk ensemble2](figure/ensemble2.png) 
+
+```r
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+```
+
+```
+## The following models were ensembled: bagEarth, nnet 
+## They were weighted: 
+## 0.78 0.22
+## The resulting AUC is: 0.806
+## The fit for each individual model on the AUC is: 
+##    method     metric    metricSD
+##  bagEarth 0.80410878 0.063796990
+##      nnet 0.78488744 0.011528006
+```
+
+```r
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens2sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
+```
+
+## Ensemble of some slow methods.
+
+
+```r
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+model_list <- caretStack(wnvFac ~ Longitude + Latitude + Longitude^2 + Latitude^2 + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('bagEarth', 'gaussprRadial','xyf','avNNet' ),  
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+```
+
+```
+## Error: is(list_of_models, "caretList") is not TRUE
+```
+
+```r
+xyplot(resamples(model_list))
+```
+
+![plot of chunk ensemble3](figure/ensemble3.png) 
+
+```r
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+```
+
+```
+## The following models were ensembled: bagEarth, nnet 
+## They were weighted: 
+## 0.78 0.22
+## The resulting AUC is: 0.806
+## The fit for each individual model on the AUC is: 
+##    method     metric    metricSD
+##  bagEarth 0.80410878 0.063796990
+##      nnet 0.78488744 0.011528006
+```
+
+```r
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens3sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
+```
+
+## Nonlinear combs of .
+
+
+```r
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+
+
+model_list <- caretList(wnvFac ~ Longitude + Latitude + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda',  'nnet', 'glm', 'rpart', 'LogitBoost', 'binda', 'glmnet'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+```
+
+```
+## Warning: trControl$savePredictions=FALSE.  Setting to TRUE so we can ensemble the models.
+## Warning: indexes not defined in trControl.  Attempting to set them ourselves, so each model in the ensemble will have the same resampling indexes.
+```
+
+```
+## # weights:  91
+## initial  value 3491.336775 
+## iter  10 value 1910.416090
+## iter  20 value 1863.531787
+## iter  30 value 1835.850217
+## iter  40 value 1822.334982
+## iter  50 value 1811.830110
+## iter  60 value 1805.425605
+## iter  70 value 1800.024502
+## iter  80 value 1795.378446
+## iter  90 value 1793.468750
+## iter 100 value 1792.760272
+## final  value 1792.760272 
+## stopped after 100 iterations
+```
+
+```
+## Warning: There were missing values in resampled performance measures.
+## Warning: missing values found in aggregated results
+```
+
+```
+## Error: final tuning parameters could not be determined
+```
+
+```r
+modEns <-  caretStack(
+              model_list, 
+              method='nnet',
+              metric='ROC',
+              trControl=trainControl(
+                method='boot',
+                number=10,
+                savePredictions=TRUE,
+                classProbs=TRUE,
+                summaryFunction=twoClassSummary
+              )
+            )
+```
+
+```
+## # weights:  19
+## initial  value 5406.729440 
+## iter  10 value 1901.283736
+## iter  20 value 1851.766941
+## iter  30 value 1848.687876
+## iter  40 value 1847.428238
+## iter  50 value 1845.056049
+## iter  60 value 1844.792615
+## iter  70 value 1844.759005
+## iter  80 value 1844.355540
+## iter  90 value 1843.836010
+## iter 100 value 1843.629611
+## final  value 1843.629611 
+## stopped after 100 iterations
+```
+
+```r
+modEns
+```
+
+```
+## A nnet ensemble of 2 base models: fda, LogitBoost, bagEarth, nnet
+## 
+## Ensemble results:
+## Neural Network 
+## 
+## 10506 samples
+##     4 predictors
+##     2 classes: 'Absent', 'Present' 
+## 
+## No pre-processing
+## Resampling: Bootstrapped (10 reps) 
+## 
+## Summary of sample sizes: 10506, 10506, 10506, 10506, 10506, 10506, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   size  decay   ROC         Sens        Spec           ROC SD      
+##   1     0.0000  0.59050057  1.00000000  0.00000000000  0.1458670151
+##   1     0.0001  0.70948062  0.99991823  0.00051020408  0.1450197921
+##   1     0.1000  0.80620445  0.99983647  0.00102040816  0.0088505823
+##   3     0.0000  0.74557878  0.99991823  0.00051020408  0.1298898626
+##   3     0.0001  0.77575131  0.99934696  0.00650469439  0.0972328897
+##   3     0.1000  0.80655008  0.99970040  0.00200562984  0.0086940218
+##   5     0.0000  0.80571603  0.99891017  0.00520400379  0.0078857436
+##   5     0.0001  0.80552626  0.99877204  0.00655948728  0.0099582669
+##   5     0.1000  0.80650566  0.99972765  0.00200562984  0.0087417470
+##   Sens SD        Spec SD     
+##   0.00000000000  0.0000000000
+##   0.00025856727  0.0016134070
+##   0.00051713453  0.0032268139
+##   0.00025856727  0.0016134070
+##   0.00134199648  0.0125228235
+##   0.00077562926  0.0042290522
+##   0.00161973183  0.0085357212
+##   0.00206815326  0.0135627305
+##   0.00069181232  0.0042290522
+## 
+## ROC was used to select the optimal model using  the largest value.
+## The final values used for the model were size = 3 and decay = 0.1.
+```
+
+```r
+fullEns.pred <- predict(modEns, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens4sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
 ```
 
 ## References and notes

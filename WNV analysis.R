@@ -3,8 +3,6 @@
 #'output:
 #'  html_document:
 #'    keep_md: true
-#'    toc: true
-#'    number_sections: true
 #' ---
 
 
@@ -17,6 +15,10 @@
 #' The competition metric is AUC.
 
 #' ## Librarys and options
+
+#+ knitrOpts, echo = FALSE, cache = FALSE
+knit_theme$set('solarized-light')
+
 
 #+ libs
 
@@ -36,7 +38,11 @@ library(doMC)
 
 auc <- Metrics::auc
 
+
+#+ seed1
 set.seed(101)
+
+
 #' ## Read in data
 
 #+ dataRead
@@ -170,7 +176,7 @@ fitCvRF <- train %>%
   filter(dYear != 2011) %$%
   randomForest::randomForest(WnvPresent ~ dMonth + Species2 + Block + Latitude + Longitude, 
     type = "classification",
-    ntree = 2000, 
+    ntree = 1000, 
     mtry = 2)
 
 # Make predictions
@@ -196,7 +202,7 @@ train %>%
 fullRF1 <- train %$%
   randomForest::randomForest(factor(WnvPresent) ~ dMonth + Species2 + Block + Latitude + Longitude, 
     type = "classification",
-    ntree = 2000, 
+    ntree = 1000, 
     mtry = 2)
 
 
@@ -208,6 +214,11 @@ options("scipen" = 100, "digits" = 8)
 
 filenameRF1 <- 'subs/rf1sub150425.csv'
 write.csv(subRF1, filenameRF1, row.names=FALSE, quote=FALSE)
+
+
+rm(fullRF1, fitCvRF, fullRF1.pred, subRF1)
+
+
 
 #' Time to submit!
 #' I did not do well.
@@ -761,29 +772,220 @@ write.csv(subGAM, filenameGAM, row.names=FALSE, quote=FALSE)
 
 #' ## Try caret
 
+#+ mc, cache = FALSE
+registerDoMC(cores = 7)
+
 
 #+ caret
 
 set.seed(2330)
 
-train$wnvFac <- factor(train$WnvPresent)
+train$wnvFac <- factor(train$WnvPresent, labels = c('Absent', 'Present'))
 
 
-registerDoMC(cores = 7)
+
 
 
 ctrl <- trainControl(method = "repeatedcv",
   repeats = 1,
+  number = 5,
   classProbs = TRUE,
   summaryFunction = twoClassSummary)
 
-fitCvCar <- train(wnvFac ~ Longitude + Latitude + Species2,
+fitCvCarGlm <- train(wnvFac ~ Longitude + Latitude + Species2,
     data = train,
-    method = 'glm',
+    method = 'LogitBoost',
     trControl = ctrl,
-    preProc = c("center", "scale"))
+    preProc = c("center", "scale"),
+    tuneLength = 3,
+    metric = 'ROC')
 
 
+fitCvCarGlm
+
+
+#'## Now let's try caretEnsemble.
+#' Code mostly copied from the vignette http://cran.r-project.org/web/packages/caretEnsemble/vignettes/caretEnsemble-intro.html
+#+ ensemble
+
+
+
+
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE)
+
+
+
+model_list <- caretList(wnvFac ~ Longitude + Latitude  + Species2 + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda',  'nnet', 'glm'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+
+
+
+xyplot(resamples(model_list))
+
+
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+
+#+ subEns
+
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens1sub150427.csv'
+write.csv(subEns, filenameEns, row.names=FALSE, quote=FALSE)
+
+
+#+ clearMem, echo = FALSE, cache = FALSE
+
+l <- ls()
+
+l <- l[l != 'train' & l != 'test']
+
+rm(list = l)
+
+
+
+#'## A big ensemble.
+
+#+ ensemble2
+set.seed(2042)
+
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+model_list <- caretList(wnvFac ~ Longitude^2 + Longitude + Latitude + Latitude^2 + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda', 'LogitBoost', 'bagEarth', 'nnet'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+
+xyplot(resamples(model_list))
+
+
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+
+#+ subEns2
+
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens2sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
+
+
+
+
+#'## Ensemble of some slow methods.
+
+#+ ensemble3
+
+
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+model_list <- caretStack(wnvFac ~ Longitude + Latitude + Longitude^2 + Latitude^2 + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('bagEarth', 'gaussprRadial','xyf','avNNet' ),  
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+
+xyplot(resamples(model_list))
+
+
+greedy_ensemble <- caretEnsemble(model_list)
+summary(greedy_ensemble)
+
+
+
+
+
+#+ subEns3
+
+fullEns.pred <- predict(greedy_ensemble, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens3sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
+
+
+
+
+#'## Nonlinear combs of .
+
+#+ ensemble4
+
+
+ctrlEns <- trainControl(method = "repeatedcv",
+  repeats = 1,
+  number = 3,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary)
+
+
+
+
+model_list <- caretList(wnvFac ~ Longitude + Latitude + Species2 + Block + dMonth + PrecipTotal + Tavg,
+    data = train,
+    methodList = c('fda',  'nnet', 'glm', 'rpart', 'LogitBoost', 'binda', 'glmnet'),
+    trControl = ctrlEns,
+    preProc = c("center", "scale"),
+    metric = 'ROC')
+
+
+modEns <-  caretStack(
+              model_list, 
+              method='nnet',
+              metric='ROC',
+              trControl=trainControl(
+                method='boot',
+                number=10,
+                savePredictions=TRUE,
+                classProbs=TRUE,
+                summaryFunction=twoClassSummary
+              )
+            )
+
+modEns
+
+#+ subEns4
+
+fullEns.pred <- predict(modEns, newdata = test)
+
+subEns <- cbind(test$Id, fullEns.pred)
+colnames(subEns) <- c("Id","WnvPresent")
+options("scipen" = 100, "digits" = 8)
+
+filenameEns <- 'subs/ens4sub150427.csv'
+write.csv(subEns, filenameEns, row.names = FALSE, quote = FALSE)
 
 
 
