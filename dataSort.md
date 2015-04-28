@@ -19,7 +19,6 @@ First some libraries
 
 
 ```r
-knit_theme$set('solarized-light')
 library(dplyr) # For handling data
 library(ggplot2) # For plotting
 library(lubridate) # For time data
@@ -38,7 +37,7 @@ But apparently there is not much data for the test years.
 
 
 ```r
-train <- read.csv('train.csv')
+train <- read.csv('train.csv', stringsAsFactors = FALSE)
 dim(train)
 ```
 
@@ -67,10 +66,10 @@ train %>% head(1) %>% t
 ```
 
 ```r
-test <- read.csv('test.csv')
+test <- read.csv('test.csv', stringsAsFactors = FALSE)
 
 
-spray <- read.csv('spray.csv')
+spray <- read.csv('spray.csv', stringsAsFactors = FALSE)
 dim(spray)
 ```
 
@@ -137,3 +136,180 @@ w %>% head(4) %>% t
 - Look at species composition and whether the trap has been +ve for WNV in the past
 - Look at species composition and WNV in nearby traps.
 - The test data for spray is not good. But maybe extract whether there has ever been spray at a trap?
+
+As I'm going to use a matrix of data, I will make a seperate matrix with only numeric data.
+And I'll keep the original data.frames in the shape their in at least.
+## Data types
+There's a lot of annoying leading zeros and things. So let's fix all that.
+First training and testing data.
+### Date to POSIX
+
+
+```r
+# Dates to POSIX
+train$Date %<>% ymd
+test$Date %<>% ymd
+spray$Date %<>% ymd
+w$Date %<>% ymd
+
+# Also want numeric data of week, month day of the year.
+# This will be our final data matrix.
+
+tr.m <- train %$% 
+          cbind(day = week(Date) * 7 + day(Date), week = week(Date), month = month(Date))
+te.m <- test %$% 
+          cbind(day = week(Date) * 7 + day(Date), week = week(Date), month = month(Date))
+
+data.frame(tr.m, WNV = factor(train$WnvPresent, labels = c('Absent', 'Present'))) %>%         
+  ggplot(aes(x = WNV, y = day)) + 
+    geom_violin(adjust = 1.2)
+```
+
+![plot of chunk ToDate](figure/ToDate.png) 
+
+### Mosquito species to 0/1 dummy variables for each species.
+There is unspecified in the test but not in the training.
+This doesn't matter in the 0/1 column format.
+Also want names that won't cause any column header problems.
+
+
+```r
+# First remove spaces and slashes
+
+train$Species %<>% gsub('\ |/', '-', .)
+test$Species %<>% gsub('\ |/', '-', .)
+
+train %>%
+  select(Species, WnvPresent) %>%
+  group_by(Species) %>%
+  summarise(wnv = mean(WnvPresent))
+```
+
+```
+## Source: local data frame [7 x 2]
+## 
+##                  Species     wnv
+## 1        CULEX-ERRATICUS 0.00000
+## 2          CULEX-PIPIENS 0.08892
+## 3 CULEX-PIPIENS-RESTUANS 0.05513
+## 4         CULEX-RESTUANS 0.01788
+## 5       CULEX-SALINARIUS 0.00000
+## 6         CULEX-TARSALIS 0.00000
+## 7        CULEX-TERRITANS 0.00000
+```
+
+```r
+# As Culex erraticus, C. salinarius, C. tarsalis and C. territans all have 0 WNV we can combine them. And this column will get removed.
+#   Can also add unspecified as this will then also get removed. Which is good as there's no training info for that class.
+train$Species <- train$Species %<>% 
+  gsub('CULEX-SALINARIUS|CULEX-TARSALIS|CULEX-TERRITANS', 'CULEX-ERRATICUS', .) %>%
+  factor
+
+test$Species <- test$Species %<>% 
+  gsub('CULEX-SALINARIUS|CULEX-TARSALIS|CULEX-TERRITANS|UNSPECIFIED-CULEX', 'CULEX-ERRATICUS', .) %>%
+  factor
+
+table(train$Species)
+```
+
+```
+## 
+##        CULEX-ERRATICUS          CULEX-PIPIENS CULEX-PIPIENS-RESTUANS 
+##                    315                   2699                   4752 
+##         CULEX-RESTUANS 
+##                   2740
+```
+
+```r
+table(test$Species)
+```
+
+```
+## 
+##        CULEX-ERRATICUS          CULEX-PIPIENS CULEX-PIPIENS-RESTUANS 
+##                  71743                  14521                  15359 
+##         CULEX-RESTUANS 
+##                  14670
+```
+
+```r
+# Now make dummy variables and remove intercept
+
+tr.m <- (model.matrix( ~ Species, train))[, -1] %>% 
+          cbind(tr.m, .)
+te.m <- (model.matrix( ~ Species, test))[, -1] %>% 
+          cbind(te.m, .)
+```
+
+### Traps
+Not sure if I can do anything with the pure trap data.
+Possibly trap as a factor
+Otherwise do proportion of WNS Present per trap.
+
+
+```r
+# Are all the test data represented in the training data.
+unique(test$Trap) %in% unique(train$Trap)
+```
+
+```
+##   [1]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [12]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [23]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [34]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [45]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [56]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [67]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [78]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+##  [89]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [100]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [111]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE FALSE FALSE FALSE
+## [122] FALSE FALSE FALSE FALSE FALSE FALSE  TRUE  TRUE  TRUE  TRUE  TRUE
+## [133]  TRUE  TRUE  TRUE  TRUE  TRUE  TRUE FALSE FALSE  TRUE FALSE  TRUE
+## [144]  TRUE  TRUE  TRUE FALSE  TRUE  TRUE
+```
+
+```r
+# No. They'll have to be NAs
+
+
+train %>%
+  select(Trap, WnvPresent) %>%
+  group_by(Trap) %>%
+  summarise(wnv = mean(WnvPresent)) %>%
+  ggplot(aes(x = factor(Trap), y = wnv)) + 
+    geom_bar(stat = 'identity', position = 'dodge')
+```
+
+```
+## Warning: position_dodge requires constant width: output may be incorrect
+```
+
+![plot of chunk trapData](figure/trapData.png) 
+
+```r
+# How often does each trap have WNV?
+trapProp <- train %>%
+  select(Trap, WnvPresent) %>%
+  group_by(Trap) %>%
+  summarise(wnv = mean(WnvPresent))
+
+# Add this data to the matrix
+tr.m <- trapPop$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))] %>%
+          cbind(tr.m, trapPrev = .)
+
+# To deal with logical(0) have to write a function
+trapNA <- function(x){
+  if(length(which(trapProp$Trap == x)) == 0){
+    return(NA)
+  } else {
+    return(which(trapProp$Trap == x))
+  }
+}
+
+# find indices for test traps and add p(WNV) to matrix.
+
+te.m <- trapPop$wnv[sapply(test$Trap, trapNA  )] %>% 
+          cbind(te.m, trapPrev = .)
+```
+

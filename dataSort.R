@@ -89,6 +89,18 @@ test$Date %<>% ymd
 spray$Date %<>% ymd
 w$Date %<>% ymd
 
+# Also want numeric data of week, month day of the year.
+# This will be our final data matrix.
+
+tr.m <- train %$% 
+          cbind(day = week(Date) * 7 + day(Date), week = week(Date), month = month(Date))
+te.m <- test %$% 
+          cbind(day = week(Date) * 7 + day(Date), week = week(Date), month = month(Date))
+
+data.frame(tr.m, WNV = factor(train$WnvPresent, labels = c('Absent', 'Present'))) %>%         
+  ggplot(aes(x = WNV, y = day)) + 
+    geom_violin(adjust = 1.2)
+
 
 #'### Mosquito species to 0/1 dummy variables for each species.
 #' There is unspecified in the test but not in the training.
@@ -121,17 +133,55 @@ table(test$Species)
 
 # Now make dummy variables and remove intercept
 
-tr.m <- (model.matrix( ~ Species, train))[, -1]
-te.m <- (model.matrix( ~ Species, test))[, -1]
+tr.m <- (model.matrix( ~ Species, train))[, -1] %>% 
+          cbind(tr.m, .)
+te.m <- (model.matrix( ~ Species, test))[, -1] %>% 
+          cbind(te.m, .)
 
 
 
+#' ### Traps
+#' Not sure if I can do anything with the pure trap data.
+#' Possibly trap as a factor
+#' Otherwise do proportion of WNS Present per trap.
+
+#+ trapData
+# Are all the test data represented in the training data.
+unique(test$Trap) %in% unique(train$Trap)
+
+# No. They'll have to be NAs
 
 
+train %>%
+  select(Trap, WnvPresent) %>%
+  group_by(Trap) %>%
+  summarise(wnv = mean(WnvPresent)) %>%
+  ggplot(aes(x = factor(Trap), y = wnv)) + 
+    geom_bar(stat = 'identity', position = 'dodge')
 
+# How often does each trap have WNV?
+trapProp <- train %>%
+  select(Trap, WnvPresent) %>%
+  group_by(Trap) %>%
+  summarise(wnv = mean(WnvPresent))
 
+# Add this data to the matrix
+tr.m <- trapPop$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))] %>%
+          cbind(tr.m, trapPrev = .)
 
+# To deal with logical(0) have to write a function
+trapNA <- function(x){
+  if(length(which(trapProp$Trap == x)) == 0){
+    return(NA)
+  } else {
+    return(which(trapProp$Trap == x))
+  }
+}
 
+# find indices for test traps and add p(WNV) to matrix.
+
+te.m <- trapPop$wnv[sapply(test$Trap, trapNA  )] %>% 
+          cbind(te.m, trapPrev = .)
 
 
 
