@@ -23,6 +23,10 @@ library(dplyr) # For handling data
 library(ggplot2) # For plotting
 library(lubridate) # For time data
 library(glmnet) # For quick analyses. Lasso/ridge good for seeing which vars are important.
+library(doMC)
+
+# Register cores for parallel processesing
+registerDoMC(cores = 7)
 ```
 
 ## Read in data
@@ -58,8 +62,8 @@ train %>% head(1) %>% t
 ## Street                 " N OAK PARK AVE"                                   
 ## Trap                   "T002"                                              
 ## AddressNumberAndStreet "4100  N OAK PARK AVE, Chicago, IL"                 
-## Latitude               "41.95"                                             
-## Longitude              "-87.8"                                             
+## Latitude               "41.95469"                                          
+## Longitude              "-87.800991"                                        
 ## AddressAccuracy        "9"                                                 
 ## NumMosquitos           "1"                                                 
 ## WnvPresent             "0"
@@ -82,13 +86,13 @@ head(spray)
 ```
 
 ```
-##         Date       Time Latitude Longitude
-## 1 2011-08-29 6:56:58 PM    42.39    -88.09
-## 2 2011-08-29 6:57:08 PM    42.39    -88.09
-## 3 2011-08-29 6:57:18 PM    42.39    -88.09
-## 4 2011-08-29 6:57:28 PM    42.39    -88.09
-## 5 2011-08-29 6:57:38 PM    42.39    -88.09
-## 6 2011-08-29 6:57:48 PM    42.39    -88.09
+##         Date       Time  Latitude  Longitude
+## 1 2011-08-29 6:56:58 PM 42.391623 -88.089163
+## 2 2011-08-29 6:57:08 PM 42.391348 -88.089163
+## 3 2011-08-29 6:57:18 PM 42.391022 -88.089157
+## 4 2011-08-29 6:57:28 PM 42.390637 -88.089158
+## 5 2011-08-29 6:57:38 PM 42.390410 -88.088858
+## 6 2011-08-29 6:57:48 PM 42.390395 -88.088315
 ```
 
 ```r
@@ -142,6 +146,15 @@ And I'll keep the original data.frames in the shape their in at least.
 ## Data types
 There's a lot of annoying leading zeros and things. So let's fix all that.
 First training and testing data.
+### Y values
+
+
+
+```r
+yFac.m <- factor(train$WnvPresent)
+yNum.m <- train$WnvPresent
+```
+
 ### Date to POSIX
 
 
@@ -165,7 +178,14 @@ data.frame(tr.m, WNV = factor(train$WnvPresent, labels = c('Absent', 'Present'))
     geom_violin(adjust = 1.2)
 ```
 
-![plot of chunk ToDate](figure/ToDate.png) 
+![plot of chunk ToDate](figure/ToDate-1.png) 
+
+```r
+g <- cv.glmnet(y = yNum.m, x = tr.m, type.measure="auc", family = 'binomial', parallel = TRUE)
+plot(g)
+```
+
+![plot of chunk ToDate](figure/ToDate-2.png) 
 
 ### Mosquito species to 0/1 dummy variables for each species.
 There is unspecified in the test but not in the training.
@@ -188,14 +208,14 @@ train %>%
 ```
 ## Source: local data frame [7 x 2]
 ## 
-##                  Species     wnv
-## 1        CULEX-ERRATICUS 0.00000
-## 2          CULEX-PIPIENS 0.08892
-## 3 CULEX-PIPIENS-RESTUANS 0.05513
-## 4         CULEX-RESTUANS 0.01788
-## 5       CULEX-SALINARIUS 0.00000
-## 6         CULEX-TARSALIS 0.00000
-## 7        CULEX-TERRITANS 0.00000
+##                  Species         wnv
+## 1        CULEX-ERRATICUS 0.000000000
+## 2          CULEX-PIPIENS 0.088921823
+## 3 CULEX-PIPIENS-RESTUANS 0.055134680
+## 4         CULEX-RESTUANS 0.017883212
+## 5       CULEX-SALINARIUS 0.000000000
+## 6         CULEX-TARSALIS 0.000000000
+## 7        CULEX-TERRITANS 0.000000000
 ```
 
 ```r
@@ -239,7 +259,13 @@ tr.m <- (model.matrix( ~ Species, train))[, -1] %>%
           cbind(tr.m, .)
 te.m <- (model.matrix( ~ Species, test))[, -1] %>% 
           cbind(te.m, .)
+
+g <- cv.glmnet(y = yNum.m, x = (model.matrix( ~ Species, train))[, -1], 
+  type.measure="auc", family = 'binomial', , parallel = TRUE)
+plot(g)
 ```
+
+![plot of chunk speciesData](figure/speciesData-1.png) 
 
 ### Traps
 Not sure if I can do anything with the pure trap data.
@@ -285,7 +311,7 @@ train %>%
 ## Warning: position_dodge requires constant width: output may be incorrect
 ```
 
-![plot of chunk trapData](figure/trapData.png) 
+![plot of chunk trapData](figure/trapData-1.png) 
 
 ```r
 # How often does each trap have WNV?
@@ -295,7 +321,7 @@ trapProp <- train %>%
   summarise(wnv = mean(WnvPresent))
 
 # Add this data to the matrix
-tr.m <- trapPop$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))] %>%
+tr.m <- trapProp$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))] %>%
           cbind(tr.m, trapPrev = .)
 
 # To deal with logical(0) have to write a function
@@ -309,7 +335,82 @@ trapNA <- function(x){
 
 # find indices for test traps and add p(WNV) to matrix.
 
-te.m <- trapPop$wnv[sapply(test$Trap, trapNA  )] %>% 
+te.m <- trapProp$wnv[sapply(test$Trap, trapNA  )] %>% 
           cbind(te.m, trapPrev = .)
+
+# See if it is retained with LASSO
+g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+plot(g$beta['trapPrev', ] ~ g$lambda, type = 'l')
 ```
+
+![plot of chunk trapData](figure/trapData-2.png) 
+
+```r
+# Is pretty strong to start.
+
+# Have a look at how well it does on it's own with glm and plot
+data.frame(x = trapProp$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))], 
+  y = yNum.m) %>%
+  glm(y ~ x, data = ., family = 'binomial')
+```
+
+```
+## 
+## Call:  glm(formula = y ~ x, family = "binomial", data = .)
+## 
+## Coefficients:
+## (Intercept)            x  
+##     -4.0577      18.6176  
+## 
+## Degrees of Freedom: 10505 Total (i.e. Null);  10504 Residual
+## Null Deviance:	    4321.2 
+## Residual Deviance: 4088.9 	AIC: 4092.9
+```
+
+```r
+data.frame(y = trapProp$wnv[sapply(train$Trap, function(x) which(trapProp$Trap == x))], 
+  x = yFac.m) %>%         
+  ggplot(aes(x = x, y = y)) + 
+    geom_violin(adjust = 1.2)
+```
+
+![plot of chunk trapData](figure/trapData-3.png) 
+
+### Number of mosquitos found in traps previously
+Could have done this and trap prevalence by nearest year as well. But didn't
+
+
+```r
+trapMoz <- train %>%
+  select(Trap, NumMosquitos) %>%
+  group_by(Trap) %>%
+  summarise(numMoz = mean(NumMosquitos))
+
+
+tr.m <- trapMoz$numMoz[sapply(train$Trap, function(x) which(trapMoz$Trap == x))] %>%
+          cbind(tr.m, numMoz = .)
+
+
+te.m <- trapMoz$numMoz[sapply(test$Trap, trapNA)] %>% 
+          cbind(te.m, numMoz = .)
+
+
+# See if it is retained with LASSO
+g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+plot(g$beta['numMoz', ] ~ g$lambda, type = 'l')
+```
+
+![plot of chunk numMoz](figure/numMoz-1.png) 
+
+```r
+# Gets very much dropped out of the model
+
+
+data.frame(y = trapMoz$numMoz[sapply(train$Trap, function(x) which(trapMoz$Trap == x))], 
+  x = yFac.m) %>%         
+  ggplot(aes(x = x, y = y)) + 
+    geom_violin(adjust = 1.2)
+```
+
+![plot of chunk numMoz](figure/numMoz-2.png) 
 
