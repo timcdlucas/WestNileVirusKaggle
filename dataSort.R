@@ -31,6 +31,8 @@ library(doMC)
 # Register cores for parallel processesing
 registerDoMC(cores = 7)
 
+set.seed(12049)
+
 
 
 #' ## Read in data
@@ -248,8 +250,83 @@ data.frame(y = trapMoz$numMoz[sapply(train$Trap, function(x) which(trapMoz$Trap 
 
 
 
+#' ### Weather data
+#' I'm not sure how to go about this.
+#' We certainly need to look at the weather before the trap date.
+#' But we could conceivably go 60 months or a year back through time.
+#' There are 15-20 weather variables. I thin 20 x 365 predictors is overkill.
+#'
+#' The plan
+#' - Mean weather for the year before data collection
+#' - Mean weather for 12-6 months before and 6-0 months before
+#' - Mean of 12 individual months before. Months might be a pain... so maybe 12 x 4 week periods.
+#' - Mean of 8 individual weeks before hand.
+#' - 28 days before data collection.
+#'
+#' That's about 50 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
+
+#+ weatherData, warning = FALSE
+
+names(w)
+w$Date %>% range
+test$Date %>% range
+
+# Ok so we have enough data for the whole year before the first test data point.
+
+# And make a vector of the actual weather variables.
+# Including dropping station as there's only 2
+# Also drop codesum for now. Will deal with it later.
+
+wVars <- names(w)[-c(1, 2, 13, 14, 15)]
+
+# Now sort out data classes and stuff.
+
+# Change to numeric.
+w$Tavg %<>% as.numeric
+w$Tmax %<>% as.numeric
+w$Tmin %<>% as.numeric
+
+w$Depart %<>% as.numeric
+w$Heat %<>% as.numeric
+
+w$WetBulb %<>% as.numeric
+w$DewPoint %<>% as.numeric
+w$ResultDir %<>% as.numeric
+
+# Change to numeric. 1 NA which is actually an NA so that's fine.
+w$Cool %<>% as.numeric
+
+# 'T' means trace. Which I'm going to count as zero.
+
+w$PrecipTotal %<>% gsub('T', '0', .)
+w$PrecipTotal %<>% as.numeric
+
+w$SnowFall %<>% gsub('T', '0', .)
+w$SnowFall %<>% as.numeric
 
 
 
+
+# '-' mean NA. Hopefully that's what as.numeric will do anyway.
+w$Sunset %<>% as.numeric
+w$Sunrise %<>% as.numeric
+
+w$SeaLevel %<>% as.numeric
+
+w$AvgSpeed %<>% as.numeric
+
+w$StnPressure %<>% as.numeric
+
+w[, wVars] %>% sapply(class)
+
+# Ridiculous plot but oh well
+pairs(w[, wVars], col = rgb(0,0,0, 0.02), pch = 16)
+pairs(w[, wVars[1:9]], col = rgb(0,0,0, 0.02), pch = 16)
+pairs(w[, wVars[10:17]], col = rgb(0,0,0, 0.02), pch = 16)
+
+
+#+ weatherDataYear
+
+#train$Date
 
 

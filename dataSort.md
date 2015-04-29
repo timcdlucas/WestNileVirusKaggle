@@ -27,6 +27,8 @@ library(doMC)
 
 # Register cores for parallel processesing
 registerDoMC(cores = 7)
+
+set.seed(12049)
 ```
 
 ## Read in data
@@ -63,7 +65,7 @@ train %>% head(1) %>% t
 ## Trap                   "T002"                                              
 ## AddressNumberAndStreet "4100  N OAK PARK AVE, Chicago, IL"                 
 ## Latitude               "41.95469"                                          
-## Longitude              "-87.800991"                                        
+## Longitude              "-87.80099"                                         
 ## AddressAccuracy        "9"                                                 
 ## NumMosquitos           "1"                                                 
 ## WnvPresent             "0"
@@ -86,13 +88,13 @@ head(spray)
 ```
 
 ```
-##         Date       Time  Latitude  Longitude
-## 1 2011-08-29 6:56:58 PM 42.391623 -88.089163
-## 2 2011-08-29 6:57:08 PM 42.391348 -88.089163
-## 3 2011-08-29 6:57:18 PM 42.391022 -88.089157
-## 4 2011-08-29 6:57:28 PM 42.390637 -88.089158
-## 5 2011-08-29 6:57:38 PM 42.390410 -88.088858
-## 6 2011-08-29 6:57:48 PM 42.390395 -88.088315
+##         Date       Time Latitude Longitude
+## 1 2011-08-29 6:56:58 PM 42.39162 -88.08916
+## 2 2011-08-29 6:57:08 PM 42.39135 -88.08916
+## 3 2011-08-29 6:57:18 PM 42.39102 -88.08916
+## 4 2011-08-29 6:57:28 PM 42.39064 -88.08916
+## 5 2011-08-29 6:57:38 PM 42.39041 -88.08886
+## 6 2011-08-29 6:57:48 PM 42.39039 -88.08831
 ```
 
 ```r
@@ -208,14 +210,14 @@ train %>%
 ```
 ## Source: local data frame [7 x 2]
 ## 
-##                  Species         wnv
-## 1        CULEX-ERRATICUS 0.000000000
-## 2          CULEX-PIPIENS 0.088921823
-## 3 CULEX-PIPIENS-RESTUANS 0.055134680
-## 4         CULEX-RESTUANS 0.017883212
-## 5       CULEX-SALINARIUS 0.000000000
-## 6         CULEX-TARSALIS 0.000000000
-## 7        CULEX-TERRITANS 0.000000000
+##                  Species        wnv
+## 1        CULEX-ERRATICUS 0.00000000
+## 2          CULEX-PIPIENS 0.08892182
+## 3 CULEX-PIPIENS-RESTUANS 0.05513468
+## 4         CULEX-RESTUANS 0.01788321
+## 5       CULEX-SALINARIUS 0.00000000
+## 6         CULEX-TARSALIS 0.00000000
+## 7        CULEX-TERRITANS 0.00000000
 ```
 
 ```r
@@ -360,11 +362,11 @@ data.frame(x = trapProp$wnv[sapply(train$Trap, function(x) which(trapProp$Trap =
 ## 
 ## Coefficients:
 ## (Intercept)            x  
-##     -4.0577      18.6176  
+##      -4.058       18.618  
 ## 
 ## Degrees of Freedom: 10505 Total (i.e. Null);  10504 Residual
-## Null Deviance:	    4321.2 
-## Residual Deviance: 4088.9 	AIC: 4092.9
+## Null Deviance:	    4321 
+## Residual Deviance: 4089 	AIC: 4093
 ```
 
 ```r
@@ -413,4 +415,130 @@ data.frame(y = trapMoz$numMoz[sapply(train$Trap, function(x) which(trapMoz$Trap 
 ```
 
 ![plot of chunk numMoz](figure/numMoz-2.png) 
+
+### Weather data
+I'm not sure how to go about this.
+We certainly need to look at the weather before the trap date.
+But we could conceivably go 60 months or a year back through time.
+There are 15-20 weather variables. I thin 20 x 365 predictors is overkill.
+
+The plan
+- Mean weather for the year before data collection
+- Mean weather for 12-6 months before and 6-0 months before
+- Mean of 12 individual months before. Months might be a pain... so maybe 12 x 4 week periods.
+- Mean of 8 individual weeks before hand.
+- 28 days before data collection.
+
+That's about 50 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
+
+
+```r
+names(w)
+```
+
+```
+##  [1] "Station"     "Date"        "Tmax"        "Tmin"        "Tavg"       
+##  [6] "Depart"      "DewPoint"    "WetBulb"     "Heat"        "Cool"       
+## [11] "Sunrise"     "Sunset"      "CodeSum"     "Depth"       "Water1"     
+## [16] "SnowFall"    "PrecipTotal" "StnPressure" "SeaLevel"    "ResultSpeed"
+## [21] "ResultDir"   "AvgSpeed"
+```
+
+```r
+w$Date %>% range
+```
+
+```
+## [1] "2007-05-01 UTC" "2014-10-31 UTC"
+```
+
+```r
+test$Date %>% range
+```
+
+```
+## [1] "2008-06-11 UTC" "2014-10-02 UTC"
+```
+
+```r
+# Ok so we have enough data for the whole year before the first test data point.
+
+# And make a vector of the actual weather variables.
+# Including dropping station as there's only 2
+# Also drop codesum for now. Will deal with it later.
+
+wVars <- names(w)[-c(1, 2, 13, 14, 15)]
+
+# Now sort out data classes and stuff.
+
+# Change to numeric.
+w$Tavg %<>% as.numeric
+w$Tmax %<>% as.numeric
+w$Tmin %<>% as.numeric
+
+w$Depart %<>% as.numeric
+w$Heat %<>% as.numeric
+
+w$WetBulb %<>% as.numeric
+w$DewPoint %<>% as.numeric
+w$ResultDir %<>% as.numeric
+
+# Change to numeric. 1 NA which is actually an NA so that's fine.
+w$Cool %<>% as.numeric
+
+# 'T' means trace. Which I'm going to count as zero.
+
+w$PrecipTotal %<>% gsub('T', '0', .)
+w$PrecipTotal %<>% as.numeric
+
+w$SnowFall %<>% gsub('T', '0', .)
+w$SnowFall %<>% as.numeric
+
+
+
+
+# '-' mean NA. Hopefully that's what as.numeric will do anyway.
+w$Sunset %<>% as.numeric
+w$Sunrise %<>% as.numeric
+
+w$SeaLevel %<>% as.numeric
+
+w$AvgSpeed %<>% as.numeric
+
+w$StnPressure %<>% as.numeric
+
+w[, wVars] %>% sapply(class)
+```
+
+```
+##        Tmax        Tmin        Tavg      Depart    DewPoint     WetBulb 
+##   "numeric"   "numeric"   "numeric"   "numeric"   "numeric"   "numeric" 
+##        Heat        Cool     Sunrise      Sunset    SnowFall PrecipTotal 
+##   "numeric"   "numeric"   "numeric"   "numeric"   "numeric"   "numeric" 
+## StnPressure    SeaLevel ResultSpeed   ResultDir    AvgSpeed 
+##   "numeric"   "numeric"   "numeric"   "numeric"   "numeric"
+```
+
+```r
+# Ridiculous plot but oh well
+pairs(w[, wVars], col = rgb(0,0,0, 0.02), pch = 16)
+```
+
+![plot of chunk weatherData](figure/weatherData-1.png) 
+
+```r
+pairs(w[, wVars[1:9]], col = rgb(0,0,0, 0.02), pch = 16)
+```
+
+![plot of chunk weatherData](figure/weatherData-2.png) 
+
+```r
+pairs(w[, wVars[10:17]], col = rgb(0,0,0, 0.02), pch = 16)
+```
+
+![plot of chunk weatherData](figure/weatherData-3.png) 
+
+```r
+#train$Date
+```
 
