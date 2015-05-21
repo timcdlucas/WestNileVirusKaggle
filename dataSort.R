@@ -486,26 +486,6 @@ te.m <- w[wTOte1, grepl('monthMean', names(w))] %>%
 
 
 
-glmnetgrid <- expand.grid(lambda = 0.01^(seq(1, 4, length.out = 7)),
-                          alpha = seq(0, 1, length.out = 7))
-
-
-fitnetMonth <- train(x = tr.m, y = yFac.m,
-    method = 'glmnet',
-    trControl = ctrl,
-    preProc = c("center", "scale", 'medianImpute'),
-    metric = 'ROC', 
-    tuneGrid = glmnetgrid)
-
-varImp(fitnetMonth)
-fitnetMonth
-
-plot(fitnetMonth, metric = "ROC", plotType = "level",
-     scales = list(x = list(rot = 90)))
-
-
-
-
 
 ctrl <- trainControl(index = yearIndex,
   classProbs = TRUE,
@@ -514,36 +494,48 @@ ctrl <- trainControl(index = yearIndex,
   )
 
 
-v <- c(1:7, grep('monthMean', colnames(tr.m)))
-v <- v[v != 36]
+# This worked well! 
 
-gGrid <- expand.grid(prune = seq(0, 0.3, by = 0.05), mstop = seq(80,120, by = 10))
+#v <- c(1:7, grep('monthMean', colnames(tr.m)))
+#v <- v[v != 36]
 
-fitBagMonth <- train(x = tr.m[,v], y = yFac.m,
-    method = 'gamboost',
-    trControl = ctrl,
-    preProc = c("center", "scale", 'knnImpute'),
-    metric = 'ROC', 
-    tuneGrid = gGrid)
+#gGrid <- expand.grid(mstop = seq(80,120, by = 10))
 
-
-varImp(fitBagMonth)
-fitBagMonth
-
-plot(fitBagMonth, metric = 'ROC')
-plot(fitBagMonth, metric = "ROC", plotType = "level",
-     scales = list(x = list(rot = 90)))
+#fitBagMonth <- train(x = tr.m[,v], y = yFac.m,
+#    method = 'gamboost',
+#    trControl = ctrl,
+#    preProc = c("center", "scale", 'knnImpute'),
+#    metric = 'ROC', 
+#    tuneGrid = gGrid)
 
 
-fit <- predict(fitBagMonth, newdata = te.m[,v], type = 'prob')
+#varImp(fitBagMonth)
+#fitBagMonth
+
+#plot(fitBagMonth, metric = 'ROC')
+#plot(fitBagMonth, metric = "ROC", plotType = "level",
+#     scales = list(x = list(rot = 90)))
 
 
-  sub <- cbind(test$Id, fit[,2])
-  colnames(sub) <- c("Id","WnvPresent")
-  options("scipen" = 100, "digits" = 8)
+#fit <- predict(fitBagMonth, newdata = te.m[,v], type = 'prob')
 
-  filename <- paste0('subs/', 'monthMeangambag', Sys.Date(), '.csv')
-  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
+#  sub <- cbind(test$Id, fit[,2])
+#  colnames(sub) <- c("Id","WnvPresent")
+#  options("scipen" = 100, "digits" = 8)
+
+#  filename <- paste0('subs/', 'monthMeangambag', Sys.Date(), '.csv')
+#  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
+#' So those month features got me AUC of 77 and up to ~60th on kaggle
+#' Better to not train on year and month. Just month.
+
+#' Now lets add lat lon back in.
+
+
+#+ latlongAdd
+tr.m = cbind(tr.m, lat = train$Latitude, lon = train$Longitude)
+te.m = cbind(te.m, lat = test$Latitude, lon = test$Longitude)
 
 
 

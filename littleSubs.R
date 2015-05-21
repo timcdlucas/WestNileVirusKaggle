@@ -328,3 +328,122 @@ fit <- predict(greedy_ensemble, newdata =  cbind(te.m[,v], lat = test$Latitude, 
 
 
 
+
+
+
+
+##########################################################################
+
+
+
+ctrl <- trainControl(index = yearIndex,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary, 
+  verboseIter=TRUE,
+  savePredictions = TRUE
+  )
+
+v <- c(1:7, grep('monthMean', colnames(tr.m)), ncol(tr.m)-1, ncol(tr.m))
+v <- v[v != 36]
+
+
+
+g <- expand.grid(decay = seq(0.01, 0.09, length.out = 6), size = 1)
+
+nnetFit <- train(x = tr.m[,v], y = yFac.m,
+    method = 'nnet',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'knnImpute'),
+    metric = 'ROC', 
+    tuneLength = 7)
+
+plot(nnetFit)
+
+
+nnetFit
+
+fit <- predict(nnetFit, newdata =  cbind(te.m[,v], lat = test$Latitude, lon = test$Longitude))
+
+
+  sub <- cbind(test$Id, fit)
+  colnames(sub) <- c("Id","WnvPresent")
+  options("scipen" = 100, "digits" = 8)
+
+  filename <- paste0('subs/', 'monthMeanNnetEns', Sys.Date(), '.csv')
+  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
+
+
+
+
+z <- nearZeroVar(tr.m[,v])
+highlyCorDescr <- findCorrelation(cor(tr.m[, v]), cutoff = .75)
+
+
+
+
+g <- expand.grid(size = 1, decay = seq(0.02, 0.1, length.out = 10), bag = TRUE)
+
+set.seed(9900)
+
+nnetFit <- train(x = tr.m[, v], y = yFac.m,
+    method = 'avNNet',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'knnImpute'),
+    metric = 'ROC', 
+    tuneGrid = g,
+    maxit = 300,
+    repeats = 20)
+
+plot(nnetFit, add = T)
+
+
+fit <- predict(nnetFit, newdata =  te.m[, v], type = 'prob')
+
+
+  sub <- cbind(test$Id, fit[, 2])
+  colnames(sub) <- c("Id","WnvPresent")
+  options("scipen" = 100, "digits" = 8)
+
+  filename <- paste0('subs/', 'monthMeanNnet2Ens', Sys.Date(), '.csv')
+  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
+
+
+
+
+###############################################################################
+
+
+g <- expand.grid(size = 1, decay = seq(0.02, 0.1, length.out = 4), bag = TRUE)
+
+set.seed(99011)
+
+v2 <- v[v != 41]
+v2 <- v2[v2 != 5]
+
+nnetFit2 <- train(x = tr.m[, v2], y = yFac.m,
+    method = 'avNNet',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'knnImpute'),
+    metric = 'ROC', 
+    tuneGrid = g,
+    maxit = 300,
+    repeats = 20)
+
+plot(nnetFit2)
+
+
+fit <- predict(nnetFit2, newdata =  te.m[, v], type = 'prob')
+
+
+  sub <- cbind(test$Id, fit[, 2])
+  colnames(sub) <- c("Id","WnvPresent")
+  options("scipen" = 100, "digits" = 8)
+
+  filename <- paste0('subs/', 'monthMeanNnet3Ens', Sys.Date(), '.csv')
+  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
+
+
+
