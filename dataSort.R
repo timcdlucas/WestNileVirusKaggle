@@ -390,10 +390,11 @@ w <- cbind(w, nDaysUsed = nDaysUsed)
 
 # For each row in training data, which row in weather data has same data.
 #   Just going to ignore the second weather station for now.
-wTOtr1 <- sapply(train$Date[1:10], function(x) which(w$Date == x & w$Station == 1))
-wTOtr12 <- mcmapply(train$Date, function(x) which(w$Date == x & w$Station == 1))
+
+wTOtr1 <- mcmapply(function(x) which(w$Date == x & w$Station == 1), train$Date, mc.cores = 7)
 # Same for test data.
-wTOte1 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 1))
+
+wTOte1 <- mcmapply(function(x) which(w$Date == x & w$Station == 1), test$Date, mc.cores = 7)
 
 # Now find yearMean columns, and take correct rows.
 tr.m <- w[wTOtr1, grepl('yearMean', names(w))] %>%
