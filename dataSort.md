@@ -20,11 +20,57 @@ First some libraries
 
 ```r
 library(dplyr) # For handling data
+```
+
+```
+## 
+## Attaching package: 'dplyr'
+## 
+## The following object is masked from 'package:MASS':
+## 
+##     select
+## 
+## The following object is masked from 'package:stats':
+## 
+##     filter
+## 
+## The following objects are masked from 'package:base':
+## 
+##     intersect, setdiff, setequal, union
+```
+
+```r
 library(ggplot2) # For plotting
 library(lubridate) # For time data
 library(glmnet) # For quick analyses. Lasso/ridge good for seeing which vars are important.
-library(doMC)
+```
 
+```
+## Loading required package: Matrix
+## 
+## Attaching package: 'Matrix'
+## 
+## The following objects are masked from 'package:base':
+## 
+##     crossprod, tcrossprod
+## 
+## Loading required package: foreach
+## foreach: simple, scalable parallel programming from Revolution Analytics
+## Use Revolution R for scalability, fault tolerance and more.
+## http://www.revolutionanalytics.com
+## Loaded glmnet 2.0-2
+```
+
+```r
+library(doMC)
+```
+
+```
+## Loading required package: iterators
+## Loading required package: parallel
+```
+
+```r
 # Register cores for parallel processesing
 registerDoMC(cores = 7)
 
@@ -428,8 +474,10 @@ The plan
 - Mean of 12 individual months before. Months might be a pain... so maybe 12 x 4 week periods.
 - Mean of 8 individual weeks before hand.
 - 28 days before data collection.
+- Mean of 12 calendar months. i.e. "The previous March". 
+    I can see "the previous breeding season" being important for example.
 
-That's about 50 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
+That's about 60 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
 
 
 ```r
@@ -539,6 +587,108 @@ pairs(w[, wVars[10:17]], col = rgb(0,0,0, 0.02), pch = 16)
 ![plot of chunk weatherData](figure/weatherData-3.png) 
 
 ```r
-#train$Date
+w.m <- as.matrix(w[, wVars])
 ```
+
+### Weather stations
+How correlated are the two weather stations?
+
+
+```r
+par(mfrow = c(4, 4))
+for(i in c(3:5, 7:10, 17:22)){
+  plot(w[w$Station == 1, i] ~ w[w$Station == 2, i], col = rgb(0,0,0, 0.02), pch = 16)
+}
+```
+
+![plot of chunk weatherStations](figure/weatherStations-1.png) 
+
+They're so correlated. I think I might ignore them.
+### Year average
+For each weather row
+
+  Find which rows are between the row date and a year before
+
+  Take mean of each weather var for those rows.
+
+
+```r
+# Year wide moving window on weather
+
+nrow(w)
+```
+
+```
+## [1] 2944
+```
+
+```r
+unique(w$Date) %>% length %>% `*`(2)
+```
+
+```
+## [1] 2944
+```
+
+```r
+# Exactly 2 rows per day
+
+w$Date[nrow(w)] - w$Date[1]  
+```
+
+```
+## Time difference of 2740 days
+```
+
+```r
+# But there are some missing days.
+
+# Convert to dates as it's easier
+date <- as.Date(w$Date)
+# And find the date one year before the date for this row in weather data.
+yearBefore <- date - 365
+
+# For each row, find all rows that are between row date and one year before.
+#   Then take colmeans. Giving mean of that var, over the year.
+#   Note, that dates less than a year before the beginning have less data.
+yearMean <- sapply(1:length(date), function(x) 
+                          w.m[which(date <= date[x] & date >= yearBefore[x]), ] %>% 
+                            colMeans(na.rm = TRUE)) %>%
+                            t
+
+colnames(yearMean) <- paste0('yearMean', colnames(yearMean))
+
+w <- cbind(w, yearMean)
+
+# Dates less than a year before have less date.
+#   Find out how much data for each row. Might use for weighting.
+nDaysUsed <- sapply(1:length(date), function(x) 
+                          sum(date <= date[x] & date >= yearBefore[x]))
+
+w <- cbind(w, nDaysUsed = nDaysUsed)
+
+
+# For each row in training data, which row in weather data has same data.
+#   Just going to ignore the second weather station for now.
+wTOtr1 <- sapply(train$Date, function(x) which(w$Date == x & w$Station == 1))
+# Same for test data.
+wTOte1 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 1))
+
+# Now find yearMean columns, and take correct rows.
+tr.m <- w[wTOtr1, grepl('yearMean', names(w))] %>%
+          cbind(tr.m, .) %>%
+          as.matrix
+
+te.m <- w[wTOte1, grepl('yearMean', names(w))] %>%
+          cbind(te.m, .) %>%
+          as.matrix
+
+g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+
+# Plot the beta coefficiants against lambda w/ red for yearMean enviro.
+#   A few enviro data points become v. important.
+plot(g, col = ifelse(grepl('yearMean', colnames(tr.m)), 'red', 'grey'))
+```
+
+![plot of chunk weatherDataYear](figure/weatherDataYear-1.png) 
 

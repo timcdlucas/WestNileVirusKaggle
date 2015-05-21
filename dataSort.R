@@ -38,6 +38,17 @@ set.seed(12049)
 
 
 
+class2ind <- function(cl)
+{
+        n <- length(cl)
+        cl <- as.factor(cl)
+        x <- matrix(0, n, length(levels(cl)) )
+        x[(1:n) + n*(unclass(cl)-1)] <- 1
+        dimnames(x) <- list(names(cl), levels(cl))
+        x
+}
+
+
 #' ## Read in data
 #' This is all the data given. 
 #'
@@ -500,15 +511,21 @@ ctrl <- trainControl(index = yearIndex,
   classProbs = TRUE,
   summaryFunction = twoClassSummary, 
   verboseIter=TRUE
-
   )
 
-fitBagMonth <- train(x = tr.m, y = yFac.m,
-    method = 'gam',
+
+v <- c(1:7, grep('monthMean', colnames(tr.m)))
+v <- v[v != 36]
+
+gGrid <- expand.grid(prune = seq(0, 0.3, by = 0.05), mstop = seq(80,120, by = 10))
+
+fitBagMonth <- train(x = tr.m[,v], y = yFac.m,
+    method = 'gamboost',
     trControl = ctrl,
-    preProc = c("center", "scale", 'medianImpute'),
+    preProc = c("center", "scale", 'knnImpute'),
     metric = 'ROC', 
-    tuneLength = 4)
+    tuneGrid = gGrid)
+
 
 varImp(fitBagMonth)
 fitBagMonth
@@ -518,14 +535,14 @@ plot(fitBagMonth, metric = "ROC", plotType = "level",
      scales = list(x = list(rot = 90)))
 
 
-fit <- predict(fitBagMonth, newdata = te.m, type = 'prob')
+fit <- predict(fitBagMonth, newdata = te.m[,v], type = 'prob')
 
 
   sub <- cbind(test$Id, fit[,2])
   colnames(sub) <- c("Id","WnvPresent")
   options("scipen" = 100, "digits" = 8)
 
-  filename <- paste0('subs/', 'monthMeanBag', Sys.Date(), '.csv')
+  filename <- paste0('subs/', 'monthMeangambag', Sys.Date(), '.csv')
   write.csv(sub, filename, row.names = FALSE, quote = FALSE)
 
 
