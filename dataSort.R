@@ -26,7 +26,10 @@ library(dplyr) # For handling data
 library(ggplot2) # For plotting
 library(lubridate) # For time data
 library(glmnet) # For quick analyses. Lasso/ridge good for seeing which vars are important.
-library(doMC)
+library(doMC) # Multicore training
+library(caret) # General machine learning
+library(caretEnsemble) # ensemble methods
+library(parallel) # add mcsapply
 
 # Register cores for parallel processesing
 registerDoMC(cores = 7)
@@ -89,7 +92,7 @@ w %>% head(4) %>% t
 
 #+ Y vectors
 
-yFac.m <- factor(train$WnvPresent)
+yFac.m <- factor(train$WnvPresent, labels = c('Abs', 'Pres'))
 yNum.m <- train$WnvPresent
 
 
@@ -114,8 +117,8 @@ data.frame(tr.m, WNV = factor(train$WnvPresent, labels = c('Absent', 'Present'))
   ggplot(aes(x = WNV, y = day)) + 
     geom_violin(adjust = 1.2)
 
-g <- cv.glmnet(y = yNum.m, x = tr.m, type.measure="auc", family = 'binomial', parallel = TRUE)
-plot(g)
+#g <- cv.glmnet(y = yNum.m, x = tr.m, type.measure="auc", family = 'binomial', parallel = TRUE)
+#plot(g)
 
 #'### Mosquito species to 0/1 dummy variables for each species.
 #' There is unspecified in the test but not in the training.
@@ -153,9 +156,13 @@ tr.m <- (model.matrix( ~ Species, train))[, -1] %>%
 te.m <- (model.matrix( ~ Species, test))[, -1] %>% 
           cbind(te.m, .)
 
-g <- cv.glmnet(y = yNum.m, x = (model.matrix( ~ Species, train))[, -1], 
-  type.measure="auc", family = 'binomial', , parallel = TRUE)
-plot(g)
+
+colnames(tr.m) <- gsub('-', '', colnames(tr.m))
+colnames(te.m) <- gsub('-', '', colnames(te.m))
+
+#g <- cv.glmnet(y = yNum.m, x = (model.matrix( ~ Species, train))[, -1], 
+#  type.measure="auc", family = 'binomial', , parallel = TRUE)
+#plot(g)
 
 
 #' ### Traps
@@ -202,8 +209,8 @@ te.m <- trapProp$wnv[sapply(test$Trap, trapNA  )] %>%
           cbind(te.m, trapPrev = .)
 
 # See if it is retained with LASSO
-g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
-plot(g$beta['trapPrev', ] ~ g$lambda, type = 'l')
+# g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+# plot(g$beta['trapPrev', ] ~ g$lambda, type = 'l')
 # Is pretty strong to start.
 
 # Have a look at how well it does on it's own with glm and plot
@@ -237,8 +244,8 @@ te.m <- trapMoz$numMoz[sapply(test$Trap, trapNA)] %>%
 
 
 # See if it is retained with LASSO
-g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
-plot(g$beta['numMoz', ] ~ g$lambda, type = 'l')
+# g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+# plot(g$beta['numMoz', ] ~ g$lambda, type = 'l')
 # Gets very much dropped out of the model
 
 
@@ -262,8 +269,10 @@ data.frame(y = trapMoz$numMoz[sapply(train$Trap, function(x) which(trapMoz$Trap 
 #' - Mean of 12 individual months before. Months might be a pain... so maybe 12 x 4 week periods.
 #' - Mean of 8 individual weeks before hand.
 #' - 28 days before data collection.
+#' - Mean of 12 calendar months. i.e. "The previous March". 
+#'     I can see "the previous breeding season" being important for example.
 #'
-#' That's about 50 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
+#' That's about 60 x 20 predictors. Still totally overkill. But we'll drop some once we've looked at them.
 
 #+ weatherData, warning = FALSE
 
@@ -324,9 +333,199 @@ pairs(w[, wVars], col = rgb(0,0,0, 0.02), pch = 16)
 pairs(w[, wVars[1:9]], col = rgb(0,0,0, 0.02), pch = 16)
 pairs(w[, wVars[10:17]], col = rgb(0,0,0, 0.02), pch = 16)
 
+w.m <- as.matrix(w[, wVars])
+
+#' ### Weather stations
+#' How correlated are the two weather stations?
+#+ weatherStations
+par(mfrow = c(4, 4))
+for(i in c(3:5, 7:10, 17:22)){
+  plot(w[w$Station == 1, i] ~ w[w$Station == 2, i], col = rgb(0,0,0, 0.02), pch = 16)
+}
+
+#' They're so correlated. I think I might ignore them.
+
+#' ### Year average
+#' For each weather row
+#'
+#'   Find which rows are between the row date and a year before
+#'
+#'   Take mean of each weather var for those rows.
 
 #+ weatherDataYear
 
-#train$Date
+# Year wide moving window on weather
+
+nrow(w)
+unique(w$Date) %>% length %>% `*`(2)
+# Exactly 2 rows per day
+
+w$Date[nrow(w)] - w$Date[1]  
+# But there are some missing days.
+
+# Convert to dates as it's easier
+date <- as.Date(w$Date)
+# And find the date one year before the date for this row in weather data.
+yearBefore <- date - 365
+
+# For each row, find all rows that are between row date and one year before.
+#   Then take colmeans. Giving mean of that var, over the year.
+#   Note, that dates less than a year before the beginning have less data.
+yearMean <- sapply(1:length(date), function(x) 
+                          w.m[which(date <= date[x] & date >= yearBefore[x]), ] %>% 
+                            colMeans(na.rm = TRUE)) %>%
+                            t
+
+colnames(yearMean) <- paste0('yearMean', colnames(yearMean))
+
+w <- cbind(w, yearMean)
+
+# Dates less than a year before have less date.
+#   Find out how much data for each row. Might use for weighting.
+nDaysUsed <- sapply(1:length(date), function(x) 
+                          sum(date <= date[x] & date >= yearBefore[x]))
+
+w <- cbind(w, nDaysUsed = nDaysUsed)
+
+
+# For each row in training data, which row in weather data has same data.
+#   Just going to ignore the second weather station for now.
+wTOtr1 <- sapply(train$Date[1:10], function(x) which(w$Date == x & w$Station == 1))
+wTOtr12 <- mcmapply(train$Date, function(x) which(w$Date == x & w$Station == 1))
+# Same for test data.
+wTOte1 <- sapply(test$Date, function(x) which(w$Date == x & w$Station == 1))
+
+# Now find yearMean columns, and take correct rows.
+tr.m <- w[wTOtr1, grepl('yearMean', names(w))] %>%
+          cbind(tr.m, .) %>%
+          as.matrix
+
+te.m <- w[wTOte1, grepl('yearMean', names(w))] %>%
+          cbind(te.m, .) %>%
+          as.matrix
+
+# g <- glmnet(y = yNum.m, x = tr.m, family = 'binomial', alpha = 1)
+
+# Plot the beta coefficiants against lambda w/ red for yearMean enviro.
+#   A few enviro data points become v. important.
+# plot(g, col = ifelse(grepl('yearMean', colnames(tr.m)), 'red', 'grey'))
+
+
+#' ### Make better cross validation
+
+#+ yearCv
+
+train$year <- year(train$Date)
+
+yearIndex <- lapply(unique(train$year), 
+  function(x) which(train$year != x)
+)
+
+ctrl <- trainControl(index = yearIndex,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary, 
+  verboseIter=TRUE
+
+  )
+
+
+
+glmnetgrid <- expand.grid(lambda = 0.01^(seq(1, 4, length.out = 4)),
+                          alpha = seq(0, 1, length.out = 4))
+
+
+fitglmnet <- train(x = tr.m, y = yFac.m,
+    method = 'glmnet',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'medianImpute'),
+    metric = 'ROC', 
+    tuneGrid = glmnetgrid)
+
+fitglmnet
+
+
+#' Lets get the Month before data for now.
+
+#+ monthData
+
+monthBefore <- date - 31
+
+# For each row, find all rows that are between row date and one year before.
+#   Then take colmeans. Giving mean of that var, over the year.
+#   Note, that dates less than a year before the beginning have less data.
+monthMean <- sapply(1:length(date), function(x) 
+                          w.m[which(date <= date[x] & date >= monthBefore[x]), ] %>% 
+                            colMeans(na.rm = TRUE)) %>%
+                            t
+
+colnames(monthMean) <- paste0('monthMean', colnames(monthMean))
+
+w <- cbind(w, monthMean)
+
+
+# Now find yearMean columns, and take correct rows.
+tr.m <- w[wTOtr1, grepl('monthMean', names(w))] %>%
+          cbind(tr.m, .) %>%
+          as.matrix
+
+te.m <- w[wTOte1, grepl('monthMean', names(w))] %>%
+          cbind(te.m, .) %>%
+          as.matrix
+
+
+
+glmnetgrid <- expand.grid(lambda = 0.01^(seq(1, 4, length.out = 7)),
+                          alpha = seq(0, 1, length.out = 7))
+
+
+fitnetMonth <- train(x = tr.m, y = yFac.m,
+    method = 'glmnet',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'medianImpute'),
+    metric = 'ROC', 
+    tuneGrid = glmnetgrid)
+
+varImp(fitnetMonth)
+fitnetMonth
+
+plot(fitnetMonth, metric = "ROC", plotType = "level",
+     scales = list(x = list(rot = 90)))
+
+
+
+
+
+ctrl <- trainControl(index = yearIndex,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary, 
+  verboseIter=TRUE
+
+  )
+
+fitBagMonth <- train(x = tr.m, y = yFac.m,
+    method = 'gam',
+    trControl = ctrl,
+    preProc = c("center", "scale", 'medianImpute'),
+    metric = 'ROC', 
+    tuneLength = 4)
+
+varImp(fitBagMonth)
+fitBagMonth
+
+plot(fitBagMonth, metric = 'ROC')
+plot(fitBagMonth, metric = "ROC", plotType = "level",
+     scales = list(x = list(rot = 90)))
+
+
+fit <- predict(fitBagMonth, newdata = te.m, type = 'prob')
+
+
+  sub <- cbind(test$Id, fit[,2])
+  colnames(sub) <- c("Id","WnvPresent")
+  options("scipen" = 100, "digits" = 8)
+
+  filename <- paste0('subs/', 'monthMeanBag', Sys.Date(), '.csv')
+  write.csv(sub, filename, row.names = FALSE, quote = FALSE)
+
 
 
